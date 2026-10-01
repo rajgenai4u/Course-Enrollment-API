@@ -33,7 +33,7 @@ pip install -r requirements.txt
 ### 4. Configure Environment Variables (.env)
 Create a .env file in the root directory and add your DATABASE_URL:
 
-DATABASE_URL=postgresql://neondb_owner:npg_gx4lX1PGTyKm@ep-silent-salad-b5acl3m1-pooler.c-7.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+DATABASE_URL=postgresql://neondb_owner:xxxxxxxxxx
 
 ### 5. Database Setup & Schema
 Before running the application, ensure the database tables are created using the following SQL script:
