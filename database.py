@@ -38,7 +38,7 @@ from pydantic import BaseModel ,Field , EmailStr, HttpUrl, field_validator
 class CourseCreate(BaseModel):
     title: str = Field(min_length=2, max_length=50)
     
-@app.post("/courses_create")
+@app.post("/courses", status_code=201)
 def create_course(course: CourseCreate):
     try:
         with SessionLocal() as session:
@@ -49,7 +49,7 @@ def create_course(course: CourseCreate):
             session.commit()
         return {"message": "Course created successfully"}
     except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Error creating course : {e}")
+        raise HTTPException(status_code=500, detail=f"Error creating course: {e}")
 
 
 def get_courses():
@@ -88,19 +88,31 @@ def get_student_by_id(student_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching student data: {e}")
 
-@app.delete("/students_delete/{student_id}")
-def delete_student(student_id: int):
+@app.delete("/enrollments/{enrollment_id}")
+def delete_enrollment(enrollment_id: int):
     try:
         with SessionLocal() as session:
+            # Check if the enrollment exists
+            result = session.execute(
+                text("SELECT id FROM enrollments WHERE id = :id"),
+                {"id": enrollment_id}
+            )
+            enrollment = result.mappings().first()
+            if not enrollment:
+                raise HTTPException(status_code=404, detail="Enrollment not found")
+
+            # Delete the enrollment record
             session.execute(
-                text("DELETE FROM students WHERE id = :id"),
-                {"id": student_id}
+                text("DELETE FROM enrollments WHERE id = :id"),
+                {"id": enrollment_id}
             )
             session.commit()
-        return {"message": "Student deleted successfully"}
+            
+        return {"message": "Enrollment deleted successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting student: {e}")
-
+        raise HTTPException(status_code=500, detail=f"Error deleting enrollment: {e}")
 
 @app.get("/students/{student_id}/courses")
 def get_student_courses(student_id: int):
@@ -113,7 +125,7 @@ def get_student_courses(student_id: int):
             ).fetchone()
 
             if not student:
-                return {"error": "Student not found"}
+                raise HTTPException(status_code=404, detail="Student not found")
 
             # Get all courses for this student
             result = session.execute(
@@ -131,12 +143,12 @@ def get_student_courses(student_id: int):
             return {
                 "student_id": student_id,
                 "student_name": student[1],
-                "courses": courses,
-                "total_courses": len(courses)
+                "courses": courses
             }
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
-
+        raise HTTPException(status_code=500, detail=f"Error fetching student courses: {e}")
 
 
 class EnrollCreate(BaseModel):
@@ -144,31 +156,33 @@ class EnrollCreate(BaseModel):
     course_id: int = Field(..., gt=0, description="ID of the course")
 
 @app.post("/enroll")
-def enroll_student(enrollment: EnrollCreate):
-    with SessionLocal() as session:
-        # 1. check student exists
-        s = session.execute(text("SELECT id FROM students WHERE id = :id"), {"id": enrollment.student_id}).fetchone()
-        if not s:
-            return {"error": "Student not found"}
+def enroll_student(enrollment: EnrollmentCreate):
+    try:
+        with SessionLocal() as session:
+            # Check if student exists
+            student = session.execute(
+                text("SELECT id FROM students WHERE id = :id"),
+                {"id": enrollment.student_id}
+            ).fetchone()
+            if not student:
+                raise HTTPException(status_code=404, detail="Student not found")
 
-        # 2. check course exists
-        c = session.execute(text("SELECT id FROM courses WHERE id = :id"), {"id": enrollment.course_id}).fetchone()
-        if not c:
-            return {"error": "Course not found"}
+            # Check if course exists
+            course = session.execute(
+                text("SELECT id FROM courses WHERE id = :id"),
+                {"id": enrollment.course_id}
+            ).fetchone()
+            if not course:
+                raise HTTPException(status_code=404, detail="Course not found")
 
-        # 3. check duplicate
-        dup = session.execute(
-            text("SELECT id FROM enrollments WHERE student_id = :sid AND course_id = :cid"),
-            {"sid": enrollment.student_id, "cid": enrollment.course_id}
-        ).fetchone()
-        if dup:
-            return {"message": "Already enrolled"}
-
-        # 4. insert
-        result = session.execute(
-            text("INSERT INTO enrollments (student_id, course_id) VALUES (:sid, :cid) RETURNING id"),
-            {"sid": enrollment.student_id, "cid": enrollment.course_id}
-        )
-        new_id = result.fetchone()[0]
-        session.commit()
-        return {"id": new_id, "message": "Enrollment successful"}
+            # Enroll student
+            session.execute(
+                text("INSERT INTO enrollments (student_id, course_id) VALUES (:student_id, :course_id)"),
+                {"student_id": enrollment.student_id, "course_id": enrollment.course_id}
+            )
+            session.commit()
+            return {"message": "Student enrolled successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error enrolling student: {e}")
