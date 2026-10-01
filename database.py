@@ -49,7 +49,7 @@ def create_course(course: CourseCreate):
             session.commit()
         return {"message": "Course created successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating course : {e}")
+        raise HTTPException(status_code=404, detail=f"Error creating course : {e}")
 
 
 def get_courses():
@@ -59,7 +59,7 @@ def get_courses():
             courses = result.mappings().all()
         return courses
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching courses data: {e}")
+        raise HTTPException(status_code=404, detail=f"Error fetching courses data: {e}")
 
 
 @app.get("/courses")
