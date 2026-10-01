@@ -165,7 +165,49 @@ def enroll_student(enrollment: EnrollCreate):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error enrolling student: {e}",
         )
+@app.get("/students/{student_id}/courses")
+def get_student_courses(student_id: int):
+    try:
+        with SessionLocal() as session:
+            # 1. Check if the student exists
+            student = session.execute(
+                text("SELECT id, name FROM students WHERE id = :id"),
+                {"id": student_id},
+            ).fetchone()
 
+            if not student:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Student not found",
+                )
+
+            # 2. Join enrollments with courses to retrieve enrolled courses
+            result = session.execute(
+                text("""
+                    SELECT c.id, c.title
+                    FROM enrollments e
+                    JOIN courses c ON e.course_id = c.id
+                    WHERE e.student_id = :student_id
+                """),
+                {"student_id": student_id},
+            ).fetchall()
+
+            # 3. Format result (returns [] if student has no enrollments)
+            courses = [{"id": row[0], "title": row[1]} for row in result]
+
+            return {
+                "student_id": student[0],
+                "student_name": student[1],
+                "courses": courses,
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching student courses: {e}",
+        )
 
 # Fix Major: Route corrected from /enrollments/{id} to /enroll/{enrollment_id}
 @app.delete("/enroll/{enrollment_id}")
